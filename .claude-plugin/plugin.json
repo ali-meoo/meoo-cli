@@ -1,0 +1,21 @@
+{
+  "name": "meoo-cli",
+  "version": "1.0.0",
+  "description": "秒悟（Meoo）CLI 全栈应用构建技能 — 从项目初始化到云服务、数据库、边缘函数、CDN 部署的完整生命周期",
+  "author": {
+    "name": "Meoo Team",
+    "email": "support@meoo.com"
+  },
+  "homepage": "https://meoo.com",
+  "repository": "https://github.com/ali-meoo/meoo-cli",
+  "license": "MIT",
+  "keywords": [
+    "meoo",
+    "fullstack",
+    "supabase",
+    "deploy",
+    "cloud",
+    "edge-functions",
+    "cli"
+  ]
+}

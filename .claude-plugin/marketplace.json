@@ -1,0 +1,13 @@
+{
+  "name": "ali-meoo",
+  "owner": {
+    "name": "Meoo Team"
+  },
+  "plugins": [
+    {
+      "name": "meoo-cli",
+      "source": ".",
+      "description": "秒悟（Meoo）CLI 全栈应用构建技能 — 项目初始化、云服务、数据库、边缘函数、CDN 部署"
+    }
+  ]
+}
