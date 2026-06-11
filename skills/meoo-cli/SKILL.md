@@ -45,9 +45,41 @@ Do NOT run `meoo cloud enable` for purely frontend projects (static sites, CSS d
 
 Run `meoo info` or `meoo --json info` anytime to check environment constraints.
 
+## Two publishing paths: Sandbox vs CDN
+
+Meoo has two independent内容路径，混淆它们是新用户最常见的问题。
+
+- **Sandbox（沙箱）**：秒悟应用内的测试运行环境。源码通过 `meoo sandbox push` 或 `meoo deploy`（含推送）同步到沙箱，沙箱内 dev server 实时编译运行。在 `https://meoo.com/chat/<projectId>` 的编辑器中预览、查看代码和文件。
+- **CDN（公网地址）**：通过 `meoo deploy` 将本地 `dist/` 构建产物发布到 CDN，生成公网访问地址 `https://<id>.meoo.fun`。
+
+| | Sandbox（沙箱测试环境） | CDN（公网访问） |
+|---|---|---|
+| 用途 | 秒悟应用内预览、调试、协作 | 公网正式访问 |
+| 内容 | 源码 → dev server 实时编译 | `dist/` 构建产物 |
+| 更新方式 | `meoo sandbox push` 或 `meoo deploy`（含推送） | `meoo deploy` |
+| 访问入口 | `https://meoo.com/chat/<projectId>` | `https://<id>.meoo.fun` |
+
+**`meoo deploy` 流程**：默认先将源码同步到沙箱（会提示确认 "是否将本地代码同步到云端沙箱？"），然后构建并发布到 CDN。在 AI/CI 非交互环境中，使用 `meoo deploy --force` 跳过所有确认提示并自动推送。
+
+**常见误解**：`meoo deploy --skip-push` 只更新 CDN，不同步沙箱。结果：公网地址正常，但秒悟应用内编辑器预览为空白。这不是 bug — 两个系统独立运作。
+
+**规则**：如果用户需要在秒悟应用内预览或协作，源码必须通过 `meoo sandbox push` 或 `meoo deploy`（不加 `--skip-push`）同步到沙箱。
+
 ## Migrating an existing project
 
 If the user already has a project (React/Vue SPA) and wants to deploy it on Meoo, do NOT run `meoo init`. Read `references/migration.md` for the complete migration flow: compatibility check, build config adaptation (Vite/Webpack), hash routing switch, pnpm migration, backend-to-Edge-Function conversion, and pre-deploy checklist.
+
+## Publishing a static page (no build tooling)
+
+For pre-built HTML/CSS/JS that doesn't need a build step:
+
+1. `meoo projects create "My Static Page"`
+2. `mkdir -p dist && cp your-page.html dist/index.html`
+3. `meoo deploy --skip-build`
+
+This publishes to CDN only. Editor preview/code will be empty — this is expected for static-only deploys.
+
+**Note**: The "NEVER use a single HTML file" constraint applies only to projects developed on the platform (using templates). Static page publishing is a supported lightweight path.
 
 ---
 
@@ -110,6 +142,15 @@ MUST create a standard multi-file SPA application. NEVER use a single HTML file 
 - Never use external CDN links for JS/CSS — all references must be relative paths.
 - Never use scss/sass.
 - Never use esbuild directly or any binary dependencies.
+- **Fonts**: Never use external CDN font links (e.g. `<link href="fonts.googleapis.com">`). Use `@fontsource` instead:
+  ```bash
+  pnpm add @fontsource-variable/inter
+  ```
+  ```ts
+  // main.tsx or main.ts top-level
+  import "@fontsource-variable/inter";
+  ```
+  For `react-design` template: if `tsc` reports TS2307 on font imports, add `declare module "@fontsource-variable/*";` to a `.d.ts` file in `src/types/` (this is pre-configured in new projects).
 - After any file edit, run `pnpm run dev` before delivering to verify zero compilation errors.
 
 ---
@@ -134,12 +175,16 @@ meoo account                       # Full account info: plan, benefits, credits
 
 ### Project management
 
+Project binding is **per-directory** — each project directory has its own `.env` with `MEOO_PROJECT_URL_ID`. There is no global "current project". Switching directories switches projects automatically.
+
 ```bash
-meoo projects list                 # List projects (▸ = current)
-meoo projects create [name]        # Create and set as current
-meoo projects use <urlId>          # Switch current project
-meoo projects current              # Show current project
+meoo projects list                 # List projects (▸ = bound to current directory)
+meoo projects create [name]        # Create project and bind to current directory (.env)
+meoo projects use <urlId>          # Bind existing project to current directory (.env)
+meoo projects current              # Show project bound to current directory
 ```
+
+If a command fails with `NO_PROJECT_BOUND`, run `meoo projects use <urlId>` in the target directory first.
 
 ### Templates
 
@@ -175,7 +220,7 @@ After `cloud enable`, the CLI shows your current cloud service quota, storage us
 3. **Guide the user to upgrade** — direct them to https://docs.meoo.com/coindesc to view plan tiers and upgrade. Example: "您的云服务实例数已达当前套餐上限，请前往 https://docs.meoo.com/coindesc 查看套餐详情并升级后继续使用。"
 4. **Ask the user how to proceed** — do not assume they will upgrade. They may choose to go to https://meoo.com to delete unused projects/instances to free quota, or decide not to continue.
 
-`enable-register-login` activates email/SMS verification + password auth. Provider types: `email`, `sms`, or `email,sms`. Single-provider requires `--confirmed-provider-set` flag. This command triggers a cloud service restart — always run it LAST, after all migrations and code changes.
+`enable-register-login` activates email/SMS verification + password auth. Provider types: `email`, `sms`, or `email,sms`. Single-provider requires `--confirmed-provider-set` flag. This command is idempotent — if the requested providers are already enabled, it skips activation and avoids unnecessary service restart. When activation is needed, it triggers a cloud service restart — always run it LAST, after all migrations and code changes.
 
 ### Database
 
@@ -242,8 +287,10 @@ meoo sandbox pull --output <dir>           # Output to specific directory
 ### Deployment
 
 ```bash
-meoo deploy                                # Build + upload to CDN
+meoo deploy                                # Build + upload to CDN (prompts to push source to sandbox)
+meoo deploy --force                        # Skip all confirmation prompts (for AI/CI)
 meoo deploy --skip-build                   # Upload existing dist/
+meoo deploy --skip-push                    # Skip sandbox push (CDN only, editor preview won't update)
 meoo releases list                         # Version history
 ```
 
