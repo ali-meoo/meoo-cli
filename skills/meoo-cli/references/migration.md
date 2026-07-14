@@ -1,19 +1,24 @@
 # Migrating an existing project to Meoo
 
-If the user already has a project and wants to deploy it on Meoo, do NOT run `meoo init` — it will overwrite existing code. Instead follow this flow.
+If the user already has a project and wants to deploy it on Meoo, do NOT run `meoo init` — it will overwrite existing code.
 
-## Step 0: Compatibility check
+## Choose your migration path
 
-Only these projects can migrate to Meoo:
+| Your project | Deploy mode | Action |
+|---|---|---|
+| React/Vue SPA (no server process) | Static deploy | Continue reading below |
+| Full-stack app (Express, FastAPI, Next.js SSR, Go, etc.) | Image deploy | See `image-deploy.md` — just add `scripts/setup.sh` + `scripts/start.sh` |
 
-| ✅ Compatible | ❌ Not compatible |
+## Step 0: Compatibility check (static deploy)
+
+| ✅ Static deploy | ➡️ Use image deploy instead |
 |---|---|
 | React SPA (CRA, Vite) | Next.js / Remix (SSR) |
 | Vue SPA (Vite) | Nuxt (SSR) |
-| Any static-output SPA | Angular / Svelte / SolidJS |
-| Frontend + separate API calls | Monolith with backend server |
+| Any static-output SPA | Django / Flask / FastAPI / Express |
+| Frontend + separate API calls | Go / Rust / Java web app |
 
-If the project has SSR, server-side routing, or a tightly coupled backend, it cannot be deployed on Meoo as-is.
+Left column: follow this guide for static deploy migration. Right column: use image deploy — no template migration needed, just add `scripts/setup.sh` and `scripts/start.sh`, then `meoo deploy --runtime image`. See `image-deploy.md`.
 
 ## Step 1: Adapt build config
 
@@ -88,7 +93,9 @@ pnpm install
 
 ## Step 4: Migrate backend logic (if any)
 
-If the project has API routes (Express/Koa/etc.), migrate each endpoint to a Meoo Edge Function:
+If the project has API routes (Express/Koa/etc.), you have two options:
+
+**Option A — Static deploy + Edge Functions**: Migrate each endpoint to a Meoo Edge Function:
 
 ```
 原来: server/api/users.ts (Express route)
@@ -111,6 +118,8 @@ serve(async (req) => {
 
 前端把 API 调用地址从 `localhost:3000/api/users` 改为 Edge Function URL。详见 `cloud-patterns.md`。
 
+**Option B — Image deploy**: Keep your backend as-is and use image deploy instead. See `image-deploy.md`.
+
 ## Step 5: Connect to Meoo platform
 
 ```bash
@@ -129,7 +138,7 @@ Before deploying, verify all items:
 - [ ] `base` / `publicPath` is `'./'` (not `/` or absolute URL)
 - [ ] Dev server port is `3015` with `strictPort: true`
 - [ ] Routing is hash mode (URL has `#`)
-- [ ] No backend server process (Express/Koa/etc.)
+- [ ] No backend server process — if your project needs one, use image deploy instead
 - [ ] Build output is `dist/index.html`
 - [ ] Using pnpm (no package-lock.json or yarn.lock)
 - [ ] No external CDN links for JS/CSS (all bundled)

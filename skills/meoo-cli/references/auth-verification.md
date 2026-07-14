@@ -1,5 +1,7 @@
 # Auth Verification — Email/SMS OTP + Password
 
+> **Scope**: This guide covers authentication for projects using Supabase Auth (typically static deploy projects). Image deploy projects may implement auth server-side using any method.
+
 Covers email verification code + password and SMS verification code + password auth flows. These extend the basic username+password auth with real email/phone verification.
 
 ## Table of Contents

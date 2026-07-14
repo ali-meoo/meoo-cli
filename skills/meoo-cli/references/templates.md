@@ -1,5 +1,7 @@
 # Template-Specific Constraints
 
+> **Scope**: These constraints apply to **static deploy** template projects created via `meoo init`. Image deploy projects do not use Meoo templates and are not subject to these rules.
+
 ## Shared rules (all templates)
 
 - Dev server: port 3015, `strictPort: true`, host `0.0.0.0` — NEVER change

@@ -4,13 +4,24 @@ description: >
   从零到上线的全栈应用构建指南，基于秒悟（Meoo）平台。
   触发条件：
   (1) 用户提到"秒悟"或"Meoo"；
-  (2) 用户要从零构建应用，且需求可被以下架构覆盖：前端 SPA（React/Vue）+ Supabase（数据库/Auth/Storage）+ Deno 边缘函数 + AI 大模型服务。
-  覆盖完整生命周期：项目初始化、本地开发、云服务开通、数据库管理、边缘函数部署、CDN 发布、沙箱代码同步、账户与权益管理。
+  (2) 用户要从零构建应用，且需求可被以下架构覆盖：前端 SPA（React/Vue）+ Supabase（数据库/Auth/Storage）+ Deno 边缘函数 + AI 大模型服务；
+  (3) 用户需要部署全栈应用（含后端进程），如 Next.js SSR、Express、FastAPI 等。
+  覆盖完整生命周期：项目初始化、本地开发、云服务开通、数据库管理、边缘函数部署、CDN 发布、全栈镜像部署、沙箱代码同步、账户与权益管理。
 ---
 
 # 秒悟（Meoo）CLI 完整指南
 
 从零构建和部署全栈应用。覆盖项目初始化到生产部署的完整生命周期，包括云服务、代码规范、沙箱同步和部署。
+
+Meoo 支持两种部署模式：**静态部署**（前端 SPA → CDN）和**镜像部署**（全栈应用 → 容器）。
+
+| 项目类型 | 部署模式 | 命令 |
+|---|---|---|
+| 纯前端 SPA（React/Vue/Taro） | 静态部署 | `meoo deploy` |
+| 前端 + Supabase + Edge Functions | 静态部署 | `meoo deploy` |
+| 含后端进程（Express、FastAPI、Next.js SSR、Go 等） | 镜像部署 | `meoo deploy --runtime image` |
+
+**如何判断**：项目是否需要一个监听端口的服务器进程？是 → 镜像部署；否 → 静态部署。
 
 ## Install
 
@@ -22,6 +33,8 @@ Verify: `meoo --version`
 
 ## Project lifecycle
 
+### Static deploy (SPA)
+
 ```
 meoo login                      # 1. Authenticate (opens browser)
 meoo init react-design          # 2. Initialize from template
@@ -29,12 +42,27 @@ meoo projects create "My App"   # 3. Create remote project (MUST do after init)
 pnpm install                    # 4. Install dependencies
 pnpm dev                        # 5. Local dev server (port 3015)
 meoo deploy                     # 6. Build and publish to CDN
-meoo sandbox push               # Alt: push local code to cloud sandbox
-meoo sandbox pull               # Alt: pull sandbox code to local
-meoo account                    # Check plan, credits, and benefits
 ```
 
 **CRITICAL**: Step 2 (`init`) and Step 3 (`projects create`) MUST be done together. `init` only creates local files — you MUST also run `projects create` to create the remote project on the platform. Without this, cloud services and deployments will fail or attach to the wrong project.
+
+### Image deploy (full-stack)
+
+```
+meoo login                      # 1. Authenticate
+meoo init nextjs-app            # 2. Initialize from template (or bring your own project)
+meoo projects create "My App"   # 3. Create project and bind to current directory
+# ... develop your app locally ...
+meoo deploy                     # 4. Upload, build remotely, deploy to container
+```
+
+Image deploy templates include `.meoo/config.json` with `runtime: "image"` pre-configured, so `meoo deploy` automatically uses image mode. If bringing your own project (without `meoo init`), add `scripts/setup.sh` + `scripts/start.sh` and run `meoo deploy --runtime image` for the first deploy.
+
+Image deploy projects only support local development — they cannot be developed or previewed on the Meoo platform website (meoo.com). See `references/image-deploy.md` for required files and constraints.
+
+After the first successful `meoo deploy --runtime image`, the runtime is saved to `.meoo/config.json`. Subsequent deploys only need `meoo deploy` — the CLI reads the saved runtime automatically.
+
+### Common steps (both modes)
 
 **Cloud services are OPTIONAL** — only enable when the project needs database, user auth, or file storage:
 ```
@@ -43,23 +71,25 @@ meoo cloud pull-env             # Pull Supabase keys to local .env
 ```
 Do NOT run `meoo cloud enable` for purely frontend projects (static sites, CSS demos, calculators, etc.).
 
+Cloud services are independent of deploy mode — see `references/cloud-patterns.md` for calling patterns.
+
 Run `meoo info` or `meoo --json info` anytime to check environment constraints.
 
-## Two publishing paths: Sandbox vs CDN
+## Publishing & deployment targets
 
-Meoo has two independent内容路径，混淆它们是新用户最常见的问题。
+Meoo has three deployment targets. Understanding them prevents common confusion.
 
-- **Sandbox（沙箱）**：秒悟应用内的测试运行环境。源码通过 `meoo sandbox push` 或 `meoo deploy`（含推送）同步到沙箱，沙箱内 dev server 实时编译运行。在 `https://meoo.com/chat/<projectId>` 的编辑器中预览、查看代码和文件。
-- **CDN（公网地址）**：通过 `meoo deploy` 将本地 `dist/` 构建产物发布到 CDN，生成公网访问地址 `https://<id>.meoo.fun`。
+- **Sandbox（沙箱）**：秒悟应用内的测试运行环境。源码通过 `meoo sandbox push` 或 `meoo deploy`（含推送）同步到沙箱，沙箱内 dev server 实时编译运行。在 `https://meoo.com/chat/<projectId>` 的编辑器中预览、查看代码和文件。**Both static and image deploy projects use sandbox for code sync.**
+- **CDN（公网静态）**：静态部署专属。通过 `meoo deploy` 将本地 `dist/` 构建产物发布到 CDN，生成公网访问地址 `https://<id>.meoo.fun`。
+- **FC 容器（公网服务）**：镜像部署专属。通过 `meoo deploy --runtime image` 将源码上传到远程构建机，打包 Docker 镜像，部署到阿里云函数计算容器，生成公网访问地址。
 
-| | Sandbox（沙箱测试环境） | CDN（公网访问） |
-|---|---|---|
-| 用途 | 秒悟应用内预览、调试、协作 | 公网正式访问 |
-| 内容 | 源码 → dev server 实时编译 | `dist/` 构建产物 |
-| 更新方式 | `meoo sandbox push` 或 `meoo deploy`（含推送） | `meoo deploy` |
-| 访问入口 | `https://meoo.com/chat/<projectId>` | `https://<id>.meoo.fun` |
+| | Sandbox（沙箱） | CDN（静态部署） | FC 容器（镜像部署） |
+|---|---|---|---|
+| 用途 | 秒悟应用内预览、调试、协作 | 公网正式访问（静态） | 公网正式访问（全栈） |
+| 更新方式 | `meoo sandbox push` 或 `meoo deploy` | `meoo deploy` | `meoo deploy --runtime image` |
+| 访问入口 | `meoo.com/chat/<projectId>` | `<id>.meoo.fun` | `<id>.meoo.fun` |
 
-**`meoo deploy` 流程**：默认先将源码同步到沙箱（会提示确认 "是否将本地代码同步到云端沙箱？"），然后构建并发布到 CDN。在 AI/CI 非交互环境中，使用 `meoo deploy --force` 跳过所有确认提示并自动推送。
+**`meoo deploy` 流程（静态部署）**：默认先将源码同步到沙箱（会提示确认 "是否将本地代码同步到云端沙箱？"），然后构建并发布到 CDN。在 AI/CI 非交互环境中，使用 `meoo deploy --force` 跳过所有确认提示并自动推送。
 
 **常见误解**：`meoo deploy --skip-push` 只更新 CDN，不同步沙箱。结果：公网地址正常，但秒悟应用内编辑器预览为空白。这不是 bug — 两个系统独立运作。
 
@@ -67,91 +97,18 @@ Meoo has two independent内容路径，混淆它们是新用户最常见的问�
 
 ## Migrating an existing project
 
-If the user already has a project (React/Vue SPA) and wants to deploy it on Meoo, do NOT run `meoo init`. Read `references/migration.md` for the complete migration flow: compatibility check, build config adaptation (Vite/Webpack), hash routing switch, pnpm migration, backend-to-Edge-Function conversion, and pre-deploy checklist.
+**Frontend SPA**: If the user already has a React/Vue SPA and wants to deploy it on Meoo via static deploy, do NOT run `meoo init`. Read `references/migration.md` for the complete migration flow: compatibility check, build config adaptation (Vite/Webpack), hash routing switch, pnpm migration, backend-to-Edge-Function conversion, and pre-deploy checklist.
 
-## Publishing a static page (no build tooling)
-
-For pre-built HTML/CSS/JS that doesn't need a build step:
-
-1. `meoo projects create "My Static Page"`
-2. `mkdir -p dist && cp your-page.html dist/index.html`
-3. `meoo deploy --skip-build`
-
-This publishes to CDN only. Editor preview/code will be empty — this is expected for static-only deploys.
-
-**Note**: The "NEVER use a single HTML file" constraint applies only to projects developed on the platform (using templates). Static page publishing is a supported lightweight path.
+**Full-stack app**: If the user has an existing app with a backend (Express, FastAPI, Next.js, etc.), use image deploy. No template migration needed — just add `scripts/setup.sh` and `scripts/start.sh`, then `meoo deploy --runtime image`. See `references/image-deploy.md` for full requirements and example scripts.
 
 ---
 
-## Hard constraints (platform-level)
+## Platform constraints
 
-Violating ANY of these will break the project. These apply to ALL templates and migrated projects.
+Constraints differ by deploy mode. **Read the relevant reference before starting any project work:**
 
-### Port 3015
-
-Dev server MUST run on port 3015 with `strictPort: true` and `host: '0.0.0.0'`. This is the only port exposed by the Meoo preview system. All templates are pre-configured — never modify the port config.
-
-### No backend servers
-
-NEVER start Express, Koa, Fastify, Flask, Django, FastAPI, or any backend server. Use Meoo Cloud instead:
-
-| Need | Solution |
-|------|----------|
-| Database | `meoo db query` / `@supabase/supabase-js` |
-| API endpoints | Edge Functions (`meoo fn deploy`) |
-| Authentication | Supabase Auth |
-| File storage | Supabase Storage |
-| Environment variables | `meoo secrets set` |
-| Real-time data | Supabase Realtime |
-
-### Build output — do NOT modify
-
-- Output directory: `dist/`
-- Entry file: `dist/index.html`
-- Base path: `./`
-- Assets directory: `assets/`
-- Assets inline limit: 1MB (images/fonts < 1MB are inlined as dataURL)
-
-These values are hardcoded in vite.config / webpack.config. Changing `base`, `outDir`, `assetsDir`, or `assetsInlineLimit` will break OSS deployment and preview.
-
-### Routing
-
-Hash routing ONLY. Use `createHashRouter` (React), `createWebHashHistory` (Vue). Never use history mode — CDN serves static files without server-side routing.
-
-All navigation MUST be implemented as URL routes first, then UI. Every tab/page needs a Route definition. (MANDATORY)
-
-### Package manager
-
-Use `pnpm` exclusively. Never use npm or yarn — they create lock file conflicts.
-
-### Application structure
-
-MUST create a standard multi-file SPA application. NEVER use a single HTML file for the entire app.
-
-### Code style rules
-
-- Single file soft limit: **260 lines**. Split into components/hooks when approaching this.
-- Do NOT add comments unless the user explicitly requests them.
-- Do NOT use emoji as icons — use `lucide-react` or inline SVG.
-- Never use base64 images or create binary files.
-- Local images MUST be placed in `src/assets/` and referenced via one of two Vite-supported methods:
-  - **ES6 import** (static): `import hero from "@/assets/hero.png"` then `<img src={hero} />`
-  - **`new URL` + `import.meta.url`** (supports dynamic paths): `<img src={new URL('/assets/hero.png', import.meta.url).href} />`
-- Never use local filesystem paths (like `/home/user-files/` or `/home/project/assets/`) directly in `<img src>` or CSS `url()` — Vite/webpack cannot resolve them at build time.
-- Never use colors not defined in the Tailwind config.
-- Never use external CDN links for JS/CSS — all references must be relative paths.
-- Never use scss/sass.
-- Never use esbuild directly or any binary dependencies.
-- **Fonts**: Never use external CDN font links (e.g. `<link href="fonts.googleapis.com">`). Use `@fontsource` instead:
-  ```bash
-  pnpm add @fontsource-variable/inter
-  ```
-  ```ts
-  // main.tsx or main.ts top-level
-  import "@fontsource-variable/inter";
-  ```
-  For `react-design` template: if `tsc` reports TS2307 on font imports, add `declare module "@fontsource-variable/*";` to a `.d.ts` file in `src/types/` (this is pre-configured in new projects).
-- After any file edit, run `pnpm run dev` before delivering to verify zero compilation errors.
+- **Static deploy**: Read `references/static-deploy.md` — port 3015, hash routing, build output rules, pnpm only, no backend servers, code style rules
+- **Image deploy**: Read `references/image-deploy.md` — port 9000, `scripts/setup.sh` + `scripts/start.sh`, cold start
 
 ---
 
@@ -186,20 +143,30 @@ meoo projects current              # Show project bound to current directory
 
 If a command fails with `NO_PROJECT_BOUND`, run `meoo projects use <urlId>` in the target directory first.
 
-### Templates
+### Templates (static deploy only)
 
 ```bash
 meoo init --list                   # List available templates
 meoo init <template>               # Initialize in current (empty) directory
 ```
 
+**Static deploy templates** (前端 SPA → CDN):
+
 | Template | Stack | Key rules |
 |----------|-------|-----------|
-| `react-project` | React 18 + Webpack 5 + Tailwind 3 | No scss/sass/esbuild |
-| `react-vite-project` | React 18 + Vite 5 + Tailwind 3 | No scss/sass, don't modify vite.config |
-| `react-design` | React 19 + Vite 7 + shadcn/ui + TanStack Router | Do NOT reinstall Radix, use `@` path alias |
-| `vue-project` | Vue 3 + Vite 5 + Pinia | **No third-party UI/icon libs at all** |
+| `react-design` | React 19 + Vite 7 + shadcn/ui + TanStack Router | Default Web template; do NOT reinstall Radix, use `@` path alias |
+| `custom-project` | Vue / Svelte / other non-React | User must explicitly request non-React framework |
 | `taro-project` | Taro 4 + React + Zustand | No native HTML tags, no arbitrary values |
+
+**Image deploy templates** (全栈应用 → 容器):
+
+| Template | Stack | Key rules |
+|----------|-------|-----------|
+| `nextjs-app` | Next.js 15 + React 19 + Tailwind CSS | standalone output, port 9000 |
+| `nuxt-app` | Nuxt 3 + Vue 3 + Tailwind CSS | nitro server, port 9000 |
+| `java-app` | Spring Boot 3 + React SPA | Maven build, port 9000 |
+| `go-app` | Go net/http + React SPA | go build, port 9000 |
+| `python-app` | FastAPI + React SPA | pip + uvicorn, port 9000 |
 
 See `references/templates.md` for full template-specific constraints.
 
@@ -246,6 +213,8 @@ meoo fn delete <name>                      # Delete function
 
 Functions run on Deno. Entry must be `index.ts`. Name regex: `/^[A-Za-z][A-Za-z0-9_-]*$/`.
 
+`MEOO_PROJECT_API_KEY` can be used in Edge Functions and image deploy server code. Never in frontend. For static deploy projects, proxy AI calls through Edge Functions.
+
 ### Secrets
 
 ```bash
@@ -256,7 +225,7 @@ meoo secrets delete <KEY>                  # Delete
 
 ### Sandbox (code sync)
 
-Sync code between your local machine and the cloud sandbox.
+Sync code between your local machine and the cloud sandbox. Works with both static and image deploy projects.
 
 ```bash
 meoo sandbox push [path]                   # Upload local code to sandbox
@@ -287,14 +256,22 @@ meoo sandbox pull --output <dir>           # Output to specific directory
 ### Deployment
 
 ```bash
+# Static deploy (SPA → CDN)
 meoo deploy                                # Build + upload to CDN (prompts to push source to sandbox)
 meoo deploy --force                        # Skip all confirmation prompts (for AI/CI)
 meoo deploy --skip-build                   # Upload existing dist/
 meoo deploy --skip-push                    # Skip sandbox push (CDN only, editor preview won't update)
-meoo releases list                         # Version history
+
+# Image deploy (full-stack → container)
+meoo deploy --runtime image                # Upload source → remote build → deploy to FC container
+meoo deploy --runtime image --force        # Skip confirmations
+
+meoo releases list                         # Version history (both static and image releases)
 ```
 
 After successful deploy, the CLI shows the project settings URL for custom domain configuration and permission management.
+
+**Image deploy upload**: Source upload honors `.dockerignore` with `.gitignore`-like matching (`node_modules`, `.next`, `dist`, `*.log`, `!keep`). Missing `.dockerignore` uses safe defaults; source archive must be ≤100MiB.
 
 ### Upgrade
 
@@ -317,42 +294,25 @@ meoo --json info                           # JSON (for AI agent parsing)
 
 ### BLOCKING: Read docs before cloud operations
 
-Before executing any cloud CLI command or writing cloud service code, you MUST understand the patterns. Read `references/cloud-patterns.md` for:
-- Supabase client setup and CRUD patterns
-- Edge Function structure and `MEOO_PROJECT_API_KEY` usage
-- AI chat integration (LLM proxy via Edge Function)
-- Authentication and file storage
-- Row Level Security (RLS) patterns
-- Database migration workflow
+Before writing any cloud service code, you MUST read the relevant reference:
 
-When implementing **email/SMS verification + password auth** (registration verification codes, login second-factor, forgot password with verification), read `references/auth-verification.md` BEFORE writing any auth code. This covers the Supabase API usage rules, registration state machine, and common pitfalls that cause 422/403 errors.
+- **Cloud patterns**: `references/cloud-patterns.md` — Supabase client (frontend + server-side), Edge Functions, AI chat, Auth, RLS, migrations
+- **Email/SMS verification auth**: `references/auth-verification.md` — registration state machine, API usage rules, common pitfalls
 
-**AI vision / image understanding** and **AI image generation / editing** are available as platform capabilities. To integrate these features, visit [meoo.com](https://meoo.com) for setup and documentation.
+`MEOO_PROJECT_API_KEY` can be used in Edge Functions and image deploy server code — never in frontend.
 
 ### Data rules
 
 - All data MUST be real cloud data. NEVER use mock/fake data.
-- `src/supabase/client.ts` and `src/supabase/types.ts` are auto-generated — do NOT edit them manually.
+- `src/supabase/client.ts` and `src/supabase/types.ts` are auto-generated — do NOT edit.
 - Do NOT modify system schemas (auth/storage/realtime/supabase_functions/vault).
-- RLS policy names: English snake_case, no quotes, no Chinese, no spaces.
-- `MEOO_PROJECT_API_KEY` MUST NEVER appear in frontend code. Always proxy through Edge Functions.
-
-### Cloud CLI execution rules
-
 - Cloud commands must be called individually (not chained with `&&`).
-- SQL execution only via `meoo db query/migrate --sql "..."` — do not pipe .sql files.
 
 ---
 
-## Template-specific constraints
+## Template-specific constraints (static deploy only)
 
-See `references/templates.md` for the full breakdown. Critical differences:
-
-**react-design**: 46 shadcn/ui components pre-installed. Do NOT `pnpm install` any Radix primitives. Route files in `src/routes/` using `createFileRoute`. `src/routeTree.gen.ts` is auto-generated — never edit manually. Use `cva` for conditional styles, not inline ternaries.
-
-**vue-project**: **Zero third-party UI or icon libraries allowed.** No Element Plus, Ant Design Vue, Naive UI, Vuetify, or any others. Build everything from scratch with Tailwind + native HTML. Icons must be inline SVG only.
-
-**taro-project**: No native HTML tags — use `@tarojs/components` exclusively. No Tailwind arbitrary values (`w-[100px]`), no `peer-*`/`group-*` modifiers, no decimal values (`space-y-1.5`). Bundle ≤ 2MB. TabBar needs ≥ 2 items. Use `Taro.*StorageSync` instead of localStorage.
+Each template has strict constraints that will break the build if violated. Read `references/templates.md` BEFORE writing code for any template project.
 
 ---
 
@@ -379,86 +339,40 @@ When users ask about plan differences, credit consumption, pricing, or feature a
 
 ## Known limitations
 
-Understand these limitations before starting a project. Do NOT attempt unsupported patterns — they will fail.
+Do NOT attempt unsupported patterns — they will fail.
 
-### Login & authentication
+### Application types
 
-- **Browser login (default)** — `meoo login` opens the browser for one-click authorization. An API Key is auto-created and saved locally.
-- **AK manual mode** — `meoo login --ak <key>` for CI/CD or environments without a browser. AKs can be created in the Web UI (Settings → API Keys).
-- **No account registration via CLI** — users must already have a Meoo platform account.
+- **Static deploy templates**: React, Vue, Taro only. No Angular/Svelte/SolidJS. See `references/static-deploy.md`.
+- **Image deploy**: any language/framework that can bind an HTTP port. See `references/image-deploy.md`.
+- **No native mobile apps** — Taro covers WeChat mini programs + H5 only.
 
-### Supported application types
+### Authentication (Supabase Auth)
 
-- **Frontend-only static apps** — React, Vue, Taro (mini program). No SSR, no Next.js, no Nuxt.
-- **No backend server processes** — cannot run Express, Koa, FastAPI, Django, etc. Use Edge Functions instead.
-- **No Angular, Svelte, SolidJS** — only React, Vue, and Taro templates are available.
-- **No native mobile apps** — iOS/Android not supported. Taro covers WeChat mini programs + H5 only.
-
-### AI service
-
-- **Fixed model list** — only the models listed above are available. Cannot use GPT, Claude, or other non-Meoo models through this integration.
-- **Text chat** — `references/cloud-patterns.md` covers text-only AI chat via Edge Function.
-- **Vision / image understanding** — available as platform capability, visit [meoo.com](https://meoo.com) to set up.
-- **Image generation / editing** — available as platform capability, visit [meoo.com](https://meoo.com) to set up.
-- **Must proxy through Edge Function** — frontend code CANNOT call `api.meoo.host` directly. The `MEOO_PROJECT_API_KEY` must only be used server-side (in Edge Functions).
-- **No streaming in non-stream mode** — if `stream: false`, the entire response is returned at once. For chat UIs, always use `stream: true`.
-
-### User authentication in projects (Supabase Auth)
-
-Users' apps built on Meoo have these auth options:
-
-**Basic auth (no verification code):**
-- **Username + password** (default, recommended) — uses virtual email `{username}@meoo.local` internally
-- **Email + password** — only when user explicitly requests real email
-- **Phone as username** — phone number used as username, NOT SMS OTP
-- **WeChat login** — mini program only (`taro-project` template)
-
-**Verification auth (email/SMS verification code + password):**
-- **Email verification code + password** — registration confirmation, login second-factor, forgot password
-- **SMS verification code + password** — same capabilities via SMS (China mainland +86 only)
-- Requires `meoo cloud enable-register-login` to activate. Read `references/auth-verification.md` for full implementation guide.
-- Pure passwordless verification-code login is NOT supported — verification must pair with password.
-
-**NOT supported — do NOT attempt:**
-- Pure verification-code passwordless login (no password)
-- Third-party OAuth (GitHub, Google, QQ, Alipay) — except WeChat in mini program
-- QR code scan login
-- Biometric login (fingerprint, face)
-
-If a user asks for any unsupported login method, clearly inform them it's not available on Meoo Cloud.
+Supported: username+password (default), email+password, phone-as-username, WeChat (mini program only), email/SMS verification code + password (requires `enable-register-login`). Pure passwordless verification-code login is NOT supported. No third-party OAuth (GitHub/Google/QQ/Alipay), no QR scan, no biometric. See `references/auth-verification.md`.
 
 ### Cloud services
 
-- **One Supabase instance per project** — cannot create multiple databases for a single project.
-- **PostgreSQL only** — no MySQL, MongoDB, Redis, or other database engines.
-- **Edge Functions run Deno** — not Node.js. Cannot use Node.js-specific APIs or npm packages that don't support Deno.
-- **Secrets are write-only** — `meoo secrets list` shows names but not values. Once set, you cannot read secret values back.
+- One Supabase instance per project. PostgreSQL only.
+- Edge Functions run Deno (not Node.js). Image deploy server code can use any runtime.
+- Secrets are write-only — values cannot be read back after setting.
+
+### AI service
+
+- Fixed model list only (see Available models above). No GPT/Claude.
+- For static deploy projects, must proxy AI calls through Edge Functions. Image deploy server code can use `MEOO_PROJECT_API_KEY` directly.
+- Vision and image generation available at [meoo.com](https://meoo.com).
 
 ### Deployment
 
-- **Static CDN only** — `meoo deploy` uploads `dist/` to OSS/CDN. No server-side rendering, no serverless function deployment (those go through `meoo fn deploy`).
-- **No rollback** — version rollback is currently disabled on the platform. You can only deploy a new version.
-- **No preview deployments** — every `meoo deploy` goes to production immediately. No staging/preview URLs.
-- **Build runs locally** — `meoo deploy` executes `pnpm run build` on your machine. Make sure all dependencies and build tools are installed locally.
-
-### Environment
-
-- The CLI API is deployed at `https://meoo.com`.
-- **Port 3015 fixed** — cannot change the dev server port. This is a platform-level constraint.
-- **pnpm required** — npm and yarn are not supported and will cause lock file conflicts.
+- No rollback — can only deploy a new version.
+- No preview deployments — every deploy goes to production immediately.
 
 ### Plans and entitlements
 
-- **Three plan tiers** — FREE, PRO, MAX. Each tier has different quotas for cloud instances, storage, projects, credits, and features.
-- **FREE plan restrictions** — free users can push code to sandbox but **cannot pull** (download) code. Upgrade to PRO or MAX for code download.
-- **Credits consumed by AI services** — deploying AI Edge Functions and using AI models consumes account credits. Check balance with `meoo account`.
-- **Quota enforcement** — when cloud instance count, storage, or other benefits reach the plan limit, cloud operations will be rejected. The agent MUST stop immediately, explain the quota issue, and direct the user to https://docs.meoo.com/coindesc to upgrade their plan. Do NOT retry, workaround, or silently skip — always pause and let the user decide (upgrade plan at https://docs.meoo.com/coindesc, or go to https://meoo.com to free up existing resources).
-
-### Sandbox sync
-
-- **Agent conflict protection** — cannot push code while the sandbox Agent is actively running. Wait for the agent task to complete first.
-- **No merge** — push/pull is overwrite-based. If both local and sandbox have changes, the push will overwrite sandbox code. The CLI warns when remote changes are detected, but does not merge.
-- **Sync state is local** — the last synced commit hash is stored in `~/.meoo/config.json`. Clearing this file resets sync tracking (next push will show "first sync").
+- Three tiers: FREE, PRO, MAX. FREE users cannot pull code from sandbox.
+- AI services consume credits. Check with `meoo account`.
+- **Quota enforcement** — when limits are reached, cloud operations are rejected. MUST stop immediately, explain the quota, and direct user to https://docs.meoo.com/coindesc to upgrade or to https://meoo.com to free up resources.
 
 ### CLI features not yet available
 
