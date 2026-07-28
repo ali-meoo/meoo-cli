@@ -5,7 +5,8 @@ description: >
   触发条件：
   (1) 用户提到"秒悟"或"Meoo"；
   (2) 用户要从零构建应用，且需求可被以下架构覆盖：前端 SPA（React/Vue）+ Supabase（数据库/Auth/Storage）+ Deno 边缘函数 + AI 大模型服务；
-  (3) 用户需要部署全栈应用（含后端进程），如 Next.js SSR、Express、FastAPI 等。
+  (3) 用户需要部署全栈应用（含后端进程），如 Next.js SSR、Express、FastAPI 等；
+  (4) 用户需要把项目部署到自己的阿里云账号（ECS/RDS/SLB，费用自付）
   覆盖完整生命周期：项目初始化、本地开发、云服务开通、数据库管理、边缘函数部署、CDN 发布、全栈镜像部署、沙箱代码同步、账户与权益管理。
 ---
 
@@ -79,21 +80,21 @@ Run `meoo info` or `meoo --json info` anytime to check environment constraints.
 
 Meoo has three deployment targets. Understanding them prevents common confusion.
 
-- **Sandbox（沙箱）**：秒悟应用内的测试运行环境。源码通过 `meoo sandbox push` 或 `meoo deploy`（含推送）同步到沙箱，沙箱内 dev server 实时编译运行。在 `https://meoo.com/chat/<projectId>` 的编辑器中预览、查看代码和文件。**Both static and image deploy projects use sandbox for code sync.**
+- **Sandbox（沙箱）**：秒悟应用内的测试运行环境。静态项目的源码通过 `meoo sandbox push` 或 `meoo deploy`（含推送）同步到沙箱，沙箱内 dev server 实时编译运行。在 `https://meoo.com/chat/<projectId>` 的编辑器中预览、查看代码和文件。**全栈镜像项目不支持 `meoo sandbox push`。**
 - **CDN（公网静态）**：静态部署专属。通过 `meoo deploy` 将本地 `dist/` 构建产物发布到 CDN，生成公网访问地址 `https://<id>.meoo.fun`。
 - **FC 容器（公网服务）**：镜像部署专属。通过 `meoo deploy --runtime image` 将源码上传到远程构建机，打包 Docker 镜像，部署到阿里云函数计算容器，生成公网访问地址。
 
 | | Sandbox（沙箱） | CDN（静态部署） | FC 容器（镜像部署） |
 |---|---|---|---|
 | 用途 | 秒悟应用内预览、调试、协作 | 公网正式访问（静态） | 公网正式访问（全栈） |
-| 更新方式 | `meoo sandbox push` 或 `meoo deploy` | `meoo deploy` | `meoo deploy --runtime image` |
+| 更新方式 | 静态项目：`meoo sandbox push` 或 `meoo deploy` | `meoo deploy` | `meoo deploy --runtime image` |
 | 访问入口 | `meoo.com/chat/<projectId>` | `<id>.meoo.fun` | `<id>.meoo.fun` |
 
 **`meoo deploy` 流程（静态部署）**：默认先将源码同步到沙箱（会提示确认 "是否将本地代码同步到云端沙箱？"），然后构建并发布到 CDN。在 AI/CI 非交互环境中，使用 `meoo deploy --force` 跳过所有确认提示并自动推送。
 
 **常见误解**：`meoo deploy --skip-push` 只更新 CDN，不同步沙箱。结果：公网地址正常，但秒悟应用内编辑器预览为空白。这不是 bug — 两个系统独立运作。
 
-**规则**：如果用户需要在秒悟应用内预览或协作，源码必须通过 `meoo sandbox push` 或 `meoo deploy`（不加 `--skip-push`）同步到沙箱。
+**规则**：静态项目如果需要在秒悟应用内预览或协作，源码必须通过 `meoo sandbox push` 或 `meoo deploy`（不加 `--skip-push`）同步到沙箱。全栈镜像项目不能使用 `meoo sandbox push`，应通过 `meoo deploy` 发布。
 
 ## Migrating an existing project
 
@@ -225,7 +226,7 @@ meoo secrets delete <KEY>                  # Delete
 
 ### Sandbox (code sync)
 
-Sync code between your local machine and the cloud sandbox. Works with both static and image deploy projects.
+Sync code between your local machine and the cloud sandbox. `sandbox push` only supports static projects; image/full-stack projects must use `meoo deploy`.
 
 ```bash
 meoo sandbox push [path]                   # Upload local code to sandbox
@@ -380,3 +381,12 @@ Supported: username+password (default), email+password, phone-as-username, WeCha
 - `meoo open` — open project in browser
 - `meoo projects delete` — delete a project
 - `meoo logs` — edge function logs
+---
+
+## Deploy to your own Alibaba Cloud account
+
+> **触发条件**：仅当用户明确说了类似"部署到我自己的阿里云账号"、"用 ECS/RDS 跑这个，费用我自己出"这样的话才使用本节。用户单纯说"部署"、"上线"、"发布"时，走上面的 `meoo deploy`，不要联想到这里。
+
+这是一个完全独立的第四条部署路径（`meoo aliyun <sub>`），不属于本技能其余部分覆盖的生命周期。**一旦触发，唯一的信息来源是 `references/aliyun-deploy.md`**——命令、flag、判断规则、状态文件、流程细节全部在那份文档里，本技能主文档和其他 `references/*.md` 的任何内容都与阿里云部署无关，不适用、也不要参照。触发后先读那份文档，再操作。
+
+---
