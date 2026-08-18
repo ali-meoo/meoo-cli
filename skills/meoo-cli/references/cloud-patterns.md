@@ -133,7 +133,7 @@ Standard pattern for LLM integration. The Edge Function proxies requests to Meoo
 
 ```typescript
 // functions/ai-chat/index.ts
-const MEOO_AI_URL = 'https://pre-api.meoo.host/meoo-ai/compatible-mode/v1/chat/completions';
+const MEOO_AI_URL = 'https://api.meoo.host/meoo-ai/compatible-mode/v1/chat/completions';
 const MEOO_PROJECT_SERVICE_AK = Deno.env.get('MEOO_PROJECT_API_KEY') || '';
 
 Deno.serve(async (req: Request) => {
