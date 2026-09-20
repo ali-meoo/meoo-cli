@@ -8,13 +8,15 @@ After `meoo cloud enable` and `meoo cloud pull-env`, your project gets Supabase 
 
 ## Supabase Client Setup
 
-### Frontend (browser)
+### Official Meoo Vite templates (browser)
 
-The CLI auto-generates `src/supabase/client.ts` with connection info from `.env`:
+After binding or cloud enable, the CLI can generate or update `src/supabase/client.ts` for recognized official Meoo Vite templates:
 
 ```typescript
 import { supabase } from '../supabase/client';
 ```
+
+For custom frontend frameworks, an existing custom Vite configuration, or a custom Supabase Client, project binding still succeeds but the CLI does not modify source files. Use the public values in `.env` (`SUPABASE_URL`, `SUPABASE_PUBLIC_URL`, and `SUPABASE_ANON_KEY`) with the framework's normal environment-loading mechanism.
 
 ### Server-side (image deploy — Node.js, Python, Go, etc.)
 
@@ -43,7 +45,9 @@ const supabaseAdmin = createClient(
 );
 ```
 
-For local development, run `meoo cloud pull-env` to write connection info to `.env`, then load with `dotenv`.
+For local development, `meoo projects use`, `meoo cloud enable`, and `meoo cloud pull-env` reconcile the URL and anon key in `.env`, which server code can load with `dotenv`. They do not write `SUPABASE_SERVICE_ROLE_KEY`; the admin-client example above only applies when a trusted deployed runtime has been provisioned with that key by the platform. Never use the anon key as a replacement for the service role key.
+
+Binding and source adaptation are separate outcomes. If the CLI reports that the project is bound but source adaptation was skipped, do not retry binding and do not create a framework-specific file at a guessed path. Continue with the project's own integration pattern.
 
 ### CRUD operations
 

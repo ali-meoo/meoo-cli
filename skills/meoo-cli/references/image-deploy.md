@@ -114,7 +114,7 @@ PORT=${PORT:-9000} python app.py
 
 Cloud services (Supabase, Edge Functions) work the same regardless of deploy mode. See `references/cloud-patterns.md` for all calling patterns.
 
-Image deploy specific: run `meoo cloud pull-env` to write Supabase connection info to `.env`. This `.env` is bundled with your source upload. The app reads it at startup (e.g. via `dotenv`).
+Image deploy specific: `meoo projects use`, `meoo cloud enable`, and `meoo cloud pull-env` can write public development connection info to the local `.env`. The CLI always excludes private `.env` files from Image source archives; production credentials come from platform runtime injection, not from the uploaded source package.
 
 ### Auto-injected environment variables
 
@@ -127,7 +127,7 @@ When the project has cloud services enabled (`meoo cloud enable`), the platform 
 | `SUPABASE_SERVICE_ROLE_KEY` | Project service role key (bypasses RLS, server-side only) |
 | `MEOO_PROJECT_API_KEY` | Project API key for calling Meoo AI services |
 
-These are available as `process.env.SUPABASE_URL` etc. in server code without any `.env` file. If you also have a local `.env` from `meoo cloud pull-env`, the platform-injected values take precedence at runtime.
+These are available as `process.env.SUPABASE_URL` etc. in server code without any uploaded `.env` file. A local `.env` is only for local development and is excluded from Image deployment archives.
 
 **Security**:
 - `SUPABASE_SERVICE_ROLE_KEY` bypasses RLS — only use for trusted server-side operations, never expose to the client.

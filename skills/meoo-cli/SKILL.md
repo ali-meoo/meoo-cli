@@ -39,13 +39,13 @@ Verify: `meoo --version`
 ```
 meoo login                      # 1. Authenticate (opens browser)
 meoo init react-design          # 2. Initialize from template
-meoo projects create "My App"   # 3. Create remote project (MUST do after init)
+meoo projects create "My App"   # 3. Create remote project and bind this directory
 pnpm install                    # 4. Install dependencies
 pnpm dev                        # 5. Local dev server (port 3015)
 meoo deploy                     # 6. Build and publish to CDN
 ```
 
-**CRITICAL**: Step 2 (`init`) and Step 3 (`projects create`) MUST be done together. `init` only creates local files — you MUST also run `projects create` to create the remote project on the platform. Without this, cloud services and deployments will fail or attach to the wrong project.
+`init` 和项目绑定最终都必须完成，但顺序可以互换：既可以先 `init` 再 `projects create/use`，也可以在纯空目录先执行 `projects use`，随后 `init`。CLI 会在模板落盘后重新协调云环境与官方模板源码。
 
 ### Image deploy (full-stack)
 
@@ -90,9 +90,9 @@ Meoo has three deployment targets. Understanding them prevents common confusion.
 | 更新方式 | 静态项目：`meoo sandbox push` 或 `meoo deploy` | `meoo deploy` | `meoo deploy --runtime image` |
 | 访问入口 | `meoo.com/chat/<projectId>` | `<id>.meoo.fun` | `<id>.meoo.fun` |
 
-**`meoo deploy` 流程（静态部署）**：默认先将源码同步到沙箱（会提示确认 "是否将本地代码同步到云端沙箱？"），然后构建并发布到 CDN。在 AI/CI 非交互环境中，使用 `meoo deploy --force` 跳过所有确认提示并自动推送。
+**`meoo deploy` 流程（静态部署）**：已开通云服务的项目默认必须先将源码同步到沙箱，再从沙箱 Git HEAD 对应的源码构建并发布到 CDN。推送失败会停止发布；本地 Git HEAD 不用作这个链路的发布版本号。SINGLE 环境直接完成发布；DUAL 环境先准备未激活版本，云同步任务成功且服务端核验项目与 commit 匹配后才完成发布。默认同步云函数，不同步 Auth 与定时任务。交互时若拒绝同步源码，云服务项目的默认发布会停止；无云服务项目维持原有本地构建发布流程。AI/CI 中用 `meoo deploy --force` 跳过确认。
 
-**常见误解**：`meoo deploy --skip-push` 只更新 CDN，不同步沙箱。结果：公网地址正常，但秒悟应用内编辑器预览为空白。这不是 bug — 两个系统独立运作。
+**兼容选项**：`meoo deploy --skip-push` 或 `--skip-build` 走本地产物 CDN 发布，不同步 DUAL 生产云服务，也不保证 CDN 产物与沙箱 commit 一致。`--skip-build` 仍可按旧行为推送源码，但发布产物来自本地。不要用这些选项发布需要云同步的新版本。
 
 **规则**：静态项目如果需要在秒悟应用内预览或协作，源码必须通过 `meoo sandbox push` 或 `meoo deploy`（不加 `--skip-push`）同步到沙箱。全栈镜像项目不能使用 `meoo sandbox push`，应通过 `meoo deploy` 发布。
 
@@ -144,6 +144,13 @@ meoo projects current              # Show project bound to current directory
 
 If a command fails with `NO_PROJECT_BOUND`, run `meoo projects use <urlId>` in the target directory first.
 
+`projects use` 的项目绑定不依赖前端框架或 `src/supabase/client.ts`：
+
+- 纯空目录、全栈 Image 项目和自定义框架均可绑定并同步 `.env`。
+- 仅官方 Meoo Vite 模板会自动生成或更新 Supabase Client 与代理配置。
+- 自定义源码、Next.js、Nuxt、FastAPI 等不会被 CLI 猜测或覆盖；看到 warning 时保留绑定，按项目自身方式读取 `.env`。
+- 本地 `.env` 只包含开发所需的 URL、anon key 和项目标识，不写入 Service Role Key 或数据库管理连接。
+
 ### Templates (static deploy only)
 
 ```bash
@@ -175,12 +182,15 @@ See `references/templates.md` for full template-specific constraints.
 
 ```bash
 meoo cloud enable                  # Provision PostgreSQL + Auth + Storage + Realtime
+meoo cloud enable --env-mode DUAL  # Choose dual development/production environments on first enable (requires server-side qualification)
 meoo cloud status                  # Check status
 meoo cloud pull-env                # Pull Supabase keys to .env
 meoo cloud enable-register-login --providers <type>  # Enable email/SMS verification auth
 ```
 
-After `cloud enable`, the CLI shows your current cloud service quota, storage usage, and available credits. It also warns that deploying AI services consumes credits. Always run `pull-env` next to sync connection info locally. The `.env` tracks which project it belongs to via `MEOO_PROJECT_URL_ID`.
+After `cloud enable`, the CLI shows your current cloud service quota, storage usage, and available credits, then attempts to reconcile local connection info automatically. Use `pull-env` to refresh or retry that local synchronization. The `.env` tracks which project it belongs to via `MEOO_PROJECT_URL_ID`.
+`meoo cloud enable` is idempotent for a project that already has cloud service: it reuses the existing SINGLE or DUAL instance, does not request another instance or consume additional instance quota, and only reconciles service readiness and local connection files. A full new-instance quota must not block this repeated-enable path.
+Omitting `--env-mode` preserves the existing platform default. `--env-mode SINGLE` selects a single environment; `--env-mode DUAL` explicitly requests separate development and production environments. The server rejects DUAL when the project or account is not eligible; do not silently retry as SINGLE. This option only applies when first enabling cloud service; it does not convert an existing instance.
 
 **IMPORTANT — Quota / entitlement errors**: If `cloud enable` or any cloud command fails with `QUOTA_EXCEEDED`, `STORAGE_EXCEEDED`, or similar entitlement errors, you MUST:
 1. **Stop all cloud operations immediately** — do not retry or attempt workarounds.
@@ -258,10 +268,13 @@ meoo sandbox pull --output <dir>           # Output to specific directory
 
 ```bash
 # Static deploy (SPA → CDN)
-meoo deploy                                # Build + upload to CDN (prompts to push source to sandbox)
+meoo deploy                                # Push source, build in sandbox, publish matching commit
 meoo deploy --force                        # Skip all confirmation prompts (for AI/CI)
-meoo deploy --skip-build                   # Upload existing dist/
-meoo deploy --skip-push                    # Skip sandbox push (CDN only, editor preview won't update)
+meoo deploy --skip-build                   # Legacy local dist/ path; may push source, no DUAL cloud sync
+meoo deploy --skip-push                    # Legacy local build CDN-only path; no DUAL cloud sync
+meoo deploy --sync-auth                    # DUAL: also sync login configuration
+meoo deploy --sync-cron                    # DUAL: also sync cron (implies functions)
+meoo deploy --no-sync-functions            # DUAL: omit function sync (unless cron selected)
 
 # Image deploy (full-stack → container)
 meoo deploy --runtime image                # Upload source → remote build → deploy to FC container
@@ -305,7 +318,7 @@ Before writing any cloud service code, you MUST read the relevant reference:
 ### Data rules
 
 - All data MUST be real cloud data. NEVER use mock/fake data.
-- `src/supabase/client.ts` and `src/supabase/types.ts` are auto-generated — do NOT edit.
+- When `src/supabase/client.ts` or `src/supabase/types.ts` contains the Meoo auto-generated marker, do NOT edit it manually. Custom projects may own different client files that the CLI intentionally leaves untouched.
 - Do NOT modify system schemas (auth/storage/realtime/supabase_functions/vault).
 - Cloud commands must be called individually (not chained with `&&`).
 
@@ -354,7 +367,7 @@ Supported: username+password (default), email+password, phone-as-username, WeCha
 
 ### Cloud services
 
-- One Supabase instance per project. PostgreSQL only.
+- Cloud environment may be SINGLE or DUAL. DUAL keeps development and production Supabase instances separate; CLI cloud development commands remain on the development instance, while `meoo deploy` performs the explicit production sync.
 - Edge Functions run Deno (not Node.js). Image deploy server code can use any runtime.
 - Secrets are write-only — values cannot be read back after setting.
 
