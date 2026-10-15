@@ -14,15 +14,15 @@ description: >
 
 从零构建和部署全栈应用。覆盖项目初始化到生产部署的完整生命周期，包括云服务、代码规范、沙箱同步和部署。
 
-Meoo 支持两种部署模式：**静态部署**（前端 SPA → CDN）和**镜像部署**（全栈应用 → 容器）。
+Meoo 支持两种 Mise 发布模式：**static**（静态文件 → CDN）和 **server**（全栈服务 → 容器）。
 
 | 项目类型 | 部署模式 | 命令 |
 |---|---|---|
-| 纯前端 SPA（React/Vue/Taro） | 静态部署 | `meoo deploy` |
+| 单 HTML、多 HTML、前端 SPA | static | `meoo deploy` |
 | 前端 + Supabase + Edge Functions | 静态部署 | `meoo deploy` |
-| 含后端进程（Express、FastAPI、Next.js SSR、Go 等） | 镜像部署 | `meoo deploy --runtime image` |
+| 含后端进程（Express、FastAPI、Next.js SSR、Go 等） | server | `meoo deploy` |
 
-**如何判断**：项目是否需要一个监听端口的服务器进程？是 → 镜像部署；否 → 静态部署。
+**BLOCKING**：执行 `meoo deploy` 或 `meoo sandbox push` 前，必须先完整读取 `references/mise-import.md`，让项目具备根 `mise.toml` 并完成对应预览和发布门禁。CLI 不会自动改造源码。
 
 ## Install
 
@@ -47,7 +47,7 @@ meoo deploy                     # 6. Build and publish to CDN
 
 `init` 和项目绑定最终都必须完成，但顺序可以互换：既可以先 `init` 再 `projects create/use`，也可以在纯空目录先执行 `projects use`，随后 `init`。CLI 会在模板落盘后重新协调云环境与官方模板源码。
 
-### Image deploy (full-stack)
+### Server deploy (full-stack)
 
 ```
 meoo login                      # 1. Authenticate
@@ -57,11 +57,7 @@ meoo projects create "My App"   # 3. Create project and bind to current director
 meoo deploy                     # 4. Upload, build remotely, deploy to container
 ```
 
-Image deploy templates include `.meoo/config.json` with `runtime: "image"` pre-configured, so `meoo deploy` automatically uses image mode. If bringing your own project (without `meoo init`), add `scripts/setup.sh` + `scripts/start.sh` and run `meoo deploy --runtime image` for the first deploy.
-
-Image deploy projects only support local development — they cannot be developed or previewed on the Meoo platform website (meoo.com). See `references/image-deploy.md` for required files and constraints.
-
-After the first successful `meoo deploy --runtime image`, the runtime is saved to `.meoo/config.json`. Subsequent deploys only need `meoo deploy` — the CLI reads the saved runtime automatically.
+无论模板还是已有工程，都先按 `references/mise-import.md` 建立 Mise 协议。服务端项目同样会同步到 Sandbox，并可在 meoo.com 预览。旧 `.meoo/config.json runtime` 和 `--runtime image` 仅用于迁移兼容，不再决定新链路。
 
 ### Common steps (both modes)
 
@@ -80,27 +76,25 @@ Run `meoo info` or `meoo --json info` anytime to check environment constraints.
 
 Meoo has three deployment targets. Understanding them prevents common confusion.
 
-- **Sandbox（沙箱）**：秒悟应用内的测试运行环境。静态项目的源码通过 `meoo sandbox push` 或 `meoo deploy`（含推送）同步到沙箱，沙箱内 dev server 实时编译运行。在 `https://meoo.com/chat/<projectId>` 的编辑器中预览、查看代码和文件。**全栈镜像项目不支持 `meoo sandbox push`。**
-- **CDN（公网静态）**：静态部署专属。通过 `meoo deploy` 将本地 `dist/` 构建产物发布到 CDN，生成公网访问地址 `https://<id>.meoo.fun`。
-- **FC 容器（公网服务）**：镜像部署专属。通过 `meoo deploy --runtime image` 将源码上传到远程构建机，打包 Docker 镜像，部署到阿里云函数计算容器，生成公网访问地址。
+- **Sandbox（沙箱）**：秒悟应用内的测试运行环境。所有受支持项目的源码通过 `meoo sandbox push` 或 `meoo deploy` 同步，统一由 `mise run dev` 在 3015 提供预览。
+- **CDN（公网静态）**：static 模式专属。通过 `meoo deploy` 将 Mise `output` 声明的静态产物发布到 CDN。
+- **FC 容器（公网服务）**：server 模式专属。通过 `meoo deploy` 将源码上传到远程构建机，按 Mise 构建并部署到函数计算容器。
 
 | | Sandbox（沙箱） | CDN（静态部署） | FC 容器（镜像部署） |
 |---|---|---|---|
 | 用途 | 秒悟应用内预览、调试、协作 | 公网正式访问（静态） | 公网正式访问（全栈） |
-| 更新方式 | 静态项目：`meoo sandbox push` 或 `meoo deploy` | `meoo deploy` | `meoo deploy --runtime image` |
+| 更新方式 | `meoo sandbox push` 或 `meoo deploy` | `meoo deploy` | `meoo deploy` |
 | 访问入口 | `meoo.com/chat/<projectId>` | `<id>.meoo.fun` | `<id>.meoo.fun` |
 
-**`meoo deploy` 流程（静态部署）**：已开通云服务的项目默认必须先将源码同步到沙箱，再从沙箱 Git HEAD 对应的源码构建并发布到 CDN。推送失败会停止发布；本地 Git HEAD 不用作这个链路的发布版本号。SINGLE 环境直接完成发布；DUAL 环境先准备未激活版本，云同步任务成功且服务端核验项目与 commit 匹配后才完成发布。默认同步云函数，不同步 Auth 与定时任务。交互时若拒绝同步源码，云服务项目的默认发布会停止；无云服务项目维持原有本地构建发布流程。AI/CI 中用 `meoo deploy --force` 跳过确认。
+**`meoo deploy` 流程**：通过 Mise 公共前置校验后，默认先尝试同步 Sandbox，再执行正式发布。Sandbox 同步失败必须告知用户，但不影响正式发布结果；静态项目会回退到本地产物 CDN 发布。
 
-**兼容选项**：`meoo deploy --skip-push` 或 `--skip-build` 走本地产物 CDN 发布，不同步 DUAL 生产云服务，也不保证 CDN 产物与沙箱 commit 一致。`--skip-build` 仍可按旧行为推送源码，但发布产物来自本地。不要用这些选项发布需要云同步的新版本。
+静态云服务项目同步成功后，从已确认的 Sandbox Git HEAD 构建并发布；DUAL 环境随后同步生产云服务。默认同步云函数，不同步 Auth 与定时任务。`--skip-push` 只跳过 Sandbox 并走本地产物发布；`--skip-build` 使用已有 Mise output；`--no-dev` 同步源码但不触发预览重启。不要把 Sandbox 未更新或预览为空报告为完整成功。
 
-**规则**：静态项目如果需要在秒悟应用内预览或协作，源码必须通过 `meoo sandbox push` 或 `meoo deploy`（不加 `--skip-push`）同步到沙箱。全栈镜像项目不能使用 `meoo sandbox push`，应通过 `meoo deploy` 发布。
+静态项目若要在秒悟应用内预览或协作，源码必须通过 `meoo sandbox push` 或 `meoo deploy`（不加 `--skip-push`）同步到沙箱。全栈项目由 Mise server 模式决定正式发布，并由同一次 `meoo deploy` 尝试同步 Sandbox。
 
 ## Migrating an existing project
 
-**Frontend SPA**: If the user already has a React/Vue SPA and wants to deploy it on Meoo via static deploy, do NOT run `meoo init`. Read `references/migration.md` for the complete migration flow: compatibility check, build config adaptation (Vite/Webpack), hash routing switch, pnpm migration, backend-to-Edge-Function conversion, and pre-deploy checklist.
-
-**Full-stack app**: If the user has an existing app with a backend (Express, FastAPI, Next.js, etc.), use image deploy. No template migration needed — just add `scripts/setup.sh` and `scripts/start.sh`, then `meoo deploy --runtime image`. See `references/image-deploy.md` for full requirements and example scripts.
+已有单/多 HTML、SPA 或全栈工程都不要重建脚手架。先读 `references/mise-import.md`，保留技术栈并做最小运行适配；静态细节见 `references/static-deploy.md`，服务端细节见 `references/image-deploy.md`。
 
 ---
 
@@ -108,8 +102,9 @@ Meoo has three deployment targets. Understanding them prevents common confusion.
 
 Constraints differ by deploy mode. **Read the relevant reference before starting any project work:**
 
-- **Static deploy**: Read `references/static-deploy.md` — port 3015, hash routing, build output rules, pnpm only, no backend servers, code style rules
-- **Image deploy**: Read `references/image-deploy.md` — port 9000, `scripts/setup.sh` + `scripts/start.sh`, cold start
+- **所有 deploy/push**：先读 `references/mise-import.md`。
+- **Static deploy**：再读 `references/static-deploy.md`。
+- **Server deploy**：再读 `references/image-deploy.md`。
 
 ---
 
@@ -166,7 +161,7 @@ meoo init <template>               # Initialize in current (empty) directory
 | `custom-project` | Vue / Svelte / other non-React | User must explicitly request non-React framework |
 | `taro-project` | Taro 4 + React + Zustand | No native HTML tags, no arbitrary values |
 
-**Image deploy templates** (全栈应用 → 容器):
+**Server deploy templates** (全栈应用 → 容器；模板默认生产端口可按项目实际保留):
 
 | Template | Stack | Key rules |
 |----------|-------|-----------|
@@ -236,7 +231,7 @@ meoo secrets delete <KEY>                  # Delete
 
 ### Sandbox (code sync)
 
-Sync code between your local machine and the cloud sandbox. `sandbox push` only supports static projects; image/full-stack projects must use `meoo deploy`.
+所有符合 Mise 协议的 static/server 项目都能在本地与云端 Sandbox 之间同步代码。
 
 ```bash
 meoo sandbox push [path]                   # Upload local code to sandbox
@@ -245,6 +240,7 @@ meoo sandbox push --force                  # Skip confirmation prompts
 meoo sandbox push --summary "changed X"    # Attach change summary (for AI agent context)
 meoo sandbox push --message "my commit"    # Custom commit message
 meoo sandbox push --no-commit              # Upload without git commit
+meoo sandbox push --no-dev                 # Upload without preview restart
 
 meoo sandbox pull [path]                   # Download code from sandbox to local
 meoo sandbox pull --dry-run                # List sandbox files without downloading
@@ -253,10 +249,12 @@ meoo sandbox pull --output <dir>           # Output to specific directory
 ```
 
 **Push safety checks** (automatic before upload):
-1. Detects if sandbox **Agent is running** — blocks push if so (AGENT_RUNNING error)
-2. Compares sandbox HEAD with last synced commit — warns if remote has new changes
-3. Lists uncommitted files in sandbox — warns about unsaved work
-4. Prompts for confirmation when warnings exist (use `--force` to skip)
+1. Validates the root `mise.toml` before any upload
+2. Detects if sandbox **Agent is running** — blocks standalone push (AGENT_RUNNING error)
+3. Compares sandbox HEAD with last synced commit and warns about remote changes
+4. Prompts for confirmation when overwrite risk exists (use `--force` to skip)
+
+传入单个文件时仍会附带并持久化根 `mise.toml` 控制文件。独立 `sandbox push` 失败为非零；`deploy` 内部同步失败只影响 `sandboxSync`，会继续正式发布。
 
 **Pull restrictions**: Free plan users cannot pull code — only push is allowed. Upgrade to PRO/MAX for code download.
 
@@ -267,27 +265,26 @@ meoo sandbox pull --output <dir>           # Output to specific directory
 ### Deployment
 
 ```bash
-# Static deploy (SPA → CDN)
-meoo deploy                                # Push source, build in sandbox, publish matching commit
+# Mise decides static CDN or server container
+meoo deploy                                # Default: sync Sandbox, then formal release
 meoo deploy --force                        # Skip all confirmation prompts (for AI/CI)
-meoo deploy --skip-build                   # Legacy local dist/ path; may push source, no DUAL cloud sync
-meoo deploy --skip-push                    # Legacy local build CDN-only path; no DUAL cloud sync
+meoo deploy --skip-build                   # Static: use existing Mise output
+meoo deploy --skip-push                    # Formal release only
+meoo deploy --no-dev                       # Sync source without preview restart
 meoo deploy --sync-auth                    # DUAL: also sync login configuration
 meoo deploy --sync-cron                    # DUAL: also sync cron (implies functions)
 meoo deploy --no-sync-functions            # DUAL: omit function sync (unless cron selected)
-
-# Image deploy (full-stack → container)
-meoo deploy --runtime image                # Upload source → remote build → deploy to FC container
-meoo deploy --runtime image --force        # Skip confirmations
 
 meoo releases list                         # Version history (both static and image releases)
 ```
 
 After successful deploy, the CLI shows the project settings URL for custom domain configuration and permission management.
 
-**Image deploy upload**: Source upload honors `.dockerignore` with `.gitignore`-like matching (`node_modules`, `.next`, `dist`, `*.log`, `!keep`). Missing `.dockerignore` uses safe defaults; source archive must be ≤100MiB.
+**Server deploy upload**: Source upload honors `.dockerignore`; source archive must be ≤100MiB. Build/start behavior comes from `mise.toml`, not fixed shell-script filenames.
 
 ### Upgrade
+
+`meoo skill install` 安装当前 CLI 包内置的 Skill，不请求在线 manifest 或 ZIP。升级 CLI 后执行此命令；未识别当前 Agent 的工具目录时用 `--target <Skill目录>` 指定。安装后重新读取 `SKILL.md` 和 `references/mise-import.md`。遇到 `MISE_ADAPTATION_REQUIRED` 或 `RUNTIME_CONFIG_CONFLICT` 时先更新 Skill，再根据实际项目修复 Mise 配置；不要从旧 HTTP 地址覆盖新版 Skill。
 
 ```bash
 meoo upgrade                               # Check and install latest version
@@ -357,8 +354,8 @@ Do NOT attempt unsupported patterns — they will fail.
 
 ### Application types
 
-- **Static deploy templates**: React, Vue, Taro only. No Angular/Svelte/SolidJS. See `references/static-deploy.md`.
-- **Image deploy**: any language/framework that can bind an HTTP port. See `references/image-deploy.md`.
+- **Static deploy**: any project that produces a valid static output with `index.html`, including single/multi HTML and supported SPAs.
+- **Server deploy**: any supported language/framework that can provide a single HTTP entry and satisfy the Mise contract.
 - **No native mobile apps** — Taro covers WeChat mini programs + H5 only.
 
 ### Authentication (Supabase Auth)
@@ -380,7 +377,7 @@ Supported: username+password (default), email+password, phone-as-username, WeCha
 ### Deployment
 
 - No rollback — can only deploy a new version.
-- No preview deployments — every deploy goes to production immediately.
+- No per-deploy preview release — every formal deploy goes to production immediately; Sandbox development preview is supported separately.
 
 ### Plans and entitlements
 
