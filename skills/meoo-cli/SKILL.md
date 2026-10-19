@@ -22,7 +22,7 @@ Meoo 支持两种 Mise 发布模式：**static**（静态文件 → CDN）和 **
 | 前端 + Supabase + Edge Functions | 静态部署 | `meoo deploy` |
 | 含后端进程（Express、FastAPI、Next.js SSR、Go 等） | server | `meoo deploy` |
 
-**BLOCKING**：执行 `meoo deploy` 或 `meoo sandbox push` 前，必须先完整读取 `references/mise-import.md`，让项目具备根 `mise.toml` 并完成对应预览和发布门禁。CLI 不会自动改造源码。
+**先分流，不强制迁移**：`meoo init react-design` 等标准静态模板及已有非 Mise 项目保留原 Push/Deploy 链路，不需要添加 `mise.toml`。新全栈模板已自带 Mise 配置；已标记 Mise 的云端项目或显式包含 `mise.toml` 的工程才执行 Mise 校验。首次接入的外部 Web 工程先读取 `references/mise-import.md`，由 Agent 做最小适配；不要仅凭 React 依赖或包名判断来源。CLI 不会自动改造业务源码。
 
 ## Install
 
@@ -31,6 +31,8 @@ npm install -g @aliyun-meoo/cli
 ```
 
 Verify: `meoo --version`
+
+**版本兼容**：GitHub Skill 更新不代表 npm 已发布对应 CLI。标准 React 免 Mise、新全栈模板自带协议和增强失败诊断，需使用包含这些修复的 CLI。先升级并核对实际版本、模板和命令输出；若最新可安装版本仍不包含修复，报告版本限制并等待发布，不要为绕过旧版 CLI 的校验而强制迁移标准 React，也不要把未发布的能力当成已可用。
 
 ## Project lifecycle
 
@@ -57,7 +59,9 @@ meoo projects create "My App"   # 3. Create project and bind to current director
 meoo deploy                     # 4. Upload, build remotely, deploy to container
 ```
 
-无论模板还是已有工程，都先按 `references/mise-import.md` 建立 Mise 协议。服务端项目同样会同步到 Sandbox，并可在 meoo.com 预览。旧 `.meoo/config.json runtime` 和 `--runtime image` 仅用于迁移兼容，不再决定新链路。
+`meoo init nextjs-app`、`nuxt-app`、`python-app`、`go-app`、`java-app` 已包含完整 `mise.toml` 和对应 Agent 指引，无需手工改配置即可 Push/Deploy。已有非 Mise 全栈工程保留旧 runtime 和发布方式，不强制迁移；要接入新预览时再按 `references/mise-import.md` 适配。不要把未验证的老工程预览报告为成功。
+
+旧全栈工程接入 Mise 时，发布前必须逐项执行 `references/mise-import.md` 的“旧全栈迁移检查表”：Mise 构建不会自动执行项目 Dockerfile，不能只补 dev/start 就发布。保留原依赖安装、环境默认值、资源文件和解释器语义，在干净环境验证预览和生产启动；不要影响没有选择 Mise 的标准 React 老项目。
 
 ### Common steps (both modes)
 
@@ -76,8 +80,8 @@ Run `meoo info` or `meoo --json info` anytime to check environment constraints.
 
 Meoo has three deployment targets. Understanding them prevents common confusion.
 
-- **Sandbox（沙箱）**：秒悟应用内的测试运行环境。所有受支持项目的源码通过 `meoo sandbox push` 或 `meoo deploy` 同步，统一由 `mise run dev` 在 3015 提供预览。
-- **CDN（公网静态）**：static 模式专属。通过 `meoo deploy` 将 Mise `output` 声明的静态产物发布到 CDN。
+- **Sandbox（沙箱）**：秒悟应用内的测试运行环境。标准 React 沿用平台原有 dev server；Mise 项目由 `mise run dev` 在 3015 提供预览。两者都支持 `meoo sandbox push` 和 Deploy 附带同步。
+- **CDN（公网静态）**：static 模式专属。标准静态项目发布 dist/build/out，Mise 项目发布 `output` 声明的产物。
 - **FC 容器（公网服务）**：server 模式专属。通过 `meoo deploy` 将源码上传到远程构建机，按 Mise 构建并部署到函数计算容器。
 
 | | Sandbox（沙箱） | CDN（静态部署） | FC 容器（镜像部署） |
@@ -86,15 +90,15 @@ Meoo has three deployment targets. Understanding them prevents common confusion.
 | 更新方式 | `meoo sandbox push` 或 `meoo deploy` | `meoo deploy` | `meoo deploy` |
 | 访问入口 | `meoo.com/chat/<projectId>` | `<id>.meoo.fun` | `<id>.meoo.fun` |
 
-**`meoo deploy` 流程**：通过 Mise 公共前置校验后，默认先尝试同步 Sandbox，再执行正式发布。Sandbox 同步失败必须告知用户，但不影响正式发布结果；静态项目会回退到本地产物 CDN 发布。
+**`meoo deploy` 流程**：先按项目实际策略分流，仅 Mise 项目做 Mise 前置校验；默认尝试同步 Sandbox，再执行正式发布。Sandbox 同步失败必须告知用户，但不影响正式发布结果；静态项目会回退到本地产物 CDN 发布。
 
 静态云服务项目同步成功后，从已确认的 Sandbox Git HEAD 构建并发布；DUAL 环境随后同步生产云服务。默认同步云函数，不同步 Auth 与定时任务。`--skip-push` 只跳过 Sandbox 并走本地产物发布；`--skip-build` 使用已有 Mise output；`--no-dev` 同步源码但不触发预览重启。不要把 Sandbox 未更新或预览为空报告为完整成功。
 
-静态项目若要在秒悟应用内预览或协作，源码必须通过 `meoo sandbox push` 或 `meoo deploy`（不加 `--skip-push`）同步到沙箱。全栈项目由 Mise server 模式决定正式发布，并由同一次 `meoo deploy` 尝试同步 Sandbox。
+静态项目若要在秒悟应用内预览或协作，源码必须通过 `meoo sandbox push` 或 `meoo deploy`（不加 `--skip-push`）同步到沙箱。新全栈模板由 Mise server 模式决定正式发布，并由同一次 `meoo deploy` 尝试同步 Sandbox；已有非 Mise 全栈项目保留原 image 发布方式。
 
 ## Migrating an existing project
 
-已有单/多 HTML、SPA 或全栈工程都不要重建脚手架。先读 `references/mise-import.md`，保留技术栈并做最小运行适配；静态细节见 `references/static-deploy.md`，服务端细节见 `references/image-deploy.md`。
+已有标准模板和非 Mise 项目不要重建脚手架，也不要为了正常 Push/Deploy 增加 Mise。首次接入的外部单/多 HTML、SPA 或全栈工程才先读 `references/mise-import.md`，保留技术栈并做最小运行适配；静态细节见 `references/static-deploy.md`，服务端细节见 `references/image-deploy.md`。
 
 ---
 
@@ -102,7 +106,7 @@ Meoo has three deployment targets. Understanding them prevents common confusion.
 
 Constraints differ by deploy mode. **Read the relevant reference before starting any project work:**
 
-- **所有 deploy/push**：先读 `references/mise-import.md`。
+- **Mise 项目及首次接入的外部 Web 工程**：先读 `references/mise-import.md`；标准模板和已有非 Mise 项目不强制迁移。
 - **Static deploy**：再读 `references/static-deploy.md`。
 - **Server deploy**：再读 `references/image-deploy.md`。
 
@@ -231,7 +235,7 @@ meoo secrets delete <KEY>                  # Delete
 
 ### Sandbox (code sync)
 
-所有符合 Mise 协议的 static/server 项目都能在本地与云端 Sandbox 之间同步代码。
+标准模板及已有非 Mise 项目沿用原代码同步链路；符合 Mise 协议的 static/server 项目按 Mise 同步和预览。
 
 ```bash
 meoo sandbox push [path]                   # Upload local code to sandbox
@@ -249,7 +253,7 @@ meoo sandbox pull --output <dir>           # Output to specific directory
 ```
 
 **Push safety checks** (automatic before upload):
-1. Validates the root `mise.toml` before any upload
+1. Validates root `mise.toml` only for explicitly opted-in Mise projects; legacy React needs no Mise file
 2. Detects if sandbox **Agent is running** — blocks standalone push (AGENT_RUNNING error)
 3. Compares sandbox HEAD with last synced commit and warns about remote changes
 4. Prompts for confirmation when overwrite risk exists (use `--force` to skip)
@@ -281,6 +285,8 @@ meoo releases list                         # Version history (both static and im
 After successful deploy, the CLI shows the project settings URL for custom domain configuration and permission management.
 
 **Server deploy upload**: Source upload honors `.dockerignore`; source archive must be ≤100MiB. Build/start behavior comes from `mise.toml`, not fixed shell-script filenames.
+
+Mise server 发布前可能提示 `MISE_DEPENDENCY_SETUP_UNVERIFIED`：有依赖清单但无 install/build 任务。它是风险告警，不强制每个项目声明 install，也不阻止发布。失败时终端和 JSON 会给出可获取的启动线索、提交配置快照及修复指引；“可能遗漏安装”不是确定根因。当前线上入口的补充错误未确认对应本次版本，不能当成本次发布日志。诊断获取失败不会改变原部署失败结果。
 
 ### Upgrade
 

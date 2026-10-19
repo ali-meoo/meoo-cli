@@ -1,6 +1,6 @@
 # Meoo Mise 适配规范
 
-当用户准备执行 `meoo deploy` 或 `meoo sandbox push` 时，先按本规范把项目改造成可同时用于正式发布和云端 Sandbox 预览的项目。CLI 只校验协议，不会替 Agent 修改源码。
+本规范仅适用于已选择 Mise 的项目和首次接入的外部 Web 工程，不用于强制迁移标准 React 模板或已有非 Mise 项目。`meoo init` 创建的新全栈模板已配齐协议，不要重复改造；标准静态模板保留原 package scripts。需要适配的工程按本规范支持正式发布和 Sandbox 预览，CLI 不替 Agent 修改业务源码。
 
 ## 支持边界
 
@@ -87,6 +87,46 @@ port = 9000
 `scripts/setup.sh`、`scripts/start.sh` 和旧 `.meoo/config.json runtime` 不是平台协议。已有脚本可由 Mise task 复用，但不要为了平台新建固定脚本。不要写死 `/home/project` 或 `/code`。
 
 static 模式必须有相对 `output`，且不能声明发布 `port` 或 `tasks.start`；server 模式必须有合法 `port` 和非空 `tasks.start`，且不能声明 `output`。不要声明已废弃的 `[meoo.preview]`。
+
+## 旧全栈迁移检查表
+
+只在工程明确接入 Mise 时执行；标准 React 老项目及未选择 Mise 的旧项目保留原发布方式，不要为正常 Push/Deploy 强行迁移。
+
+**Mise 构建不会自动执行项目 Dockerfile，也不会自动运行旧 setup.sh/start.sh。** `mise install` 只准备工具，不安装 requirements/package.json 的业务依赖。协议校验通过、镜像构建成功都不代表服务能启动。迁移前读取原 Dockerfile、已有 setup/start 脚本、依赖清单及 CI，逐项记录“旧行为 → 新 task/配置 → 验证结果”，不得只增加 dev/start。
+
+| 对比项 | 迁移与验证要求 |
+|---|---|
+| 依赖安装 | 将原真实生产依赖入口接入 `tasks.install` 或实际承担安装的 build 任务。例如原来使用 requirements-ci.txt，不要擅自改成含模型大包的 requirements.txt；保留锁文件、系统依赖和必要构建步骤。已有脚本可直接复用，不新增固定脚本协议。 |
+| 解释器与路径 | 安装和 dev/start 使用同一解释器；采用 Mise 管理的 Python 时用 `python -m pip` 与 `python -m uvicorn`。不要写死本机 `/usr/local/bin/python3`，也不要用 system 掩盖 Python 版本差异；核对 venv、工作目录、相对路径和产物路径。 |
+| 环境与并发 | 保留原脚本/Dockerfile 的业务默认值、超时与线程池设置；不要输出、硬编码或提交密钥。不要把业务线程池 workers 变量误改为 uvicorn `--workers`，或把某个客户的默认值复制到其他项目。 |
+| 文件与容器语义 | 检查 Dockerfile COPY 的源码、静态资源、配置是否会被上传，核对 `.dockerignore`、权限、临时可写目录及文件系统约束。密钥应通过安全配置提供，不能为“保留 COPY”直接公开上传秘密文件。 |
+| 预览与生产 | dev 对外监听 0.0.0.0:3015；start 监听声明的生产端口，复用原启动行为而非另造假健康响应。验证真实页面、API、资源及必要业务设置。 |
+
+Python 最小示例（仅适用于确认原项目确实使用这些依赖和启动入口的情况；环境默认值仍须逐项对齐原项目）：
+
+```toml
+[tools]
+python = "3.12"
+
+[tasks.install]
+run = "python -m pip install -r requirements-ci.txt"
+
+[tasks.dev]
+run = "python -m uvicorn app:app --host 0.0.0.0 --port 3015"
+
+[tasks.start]
+run = "python -m uvicorn app:app --host 0.0.0.0 --port 9000"
+
+[meoo.deploy]
+mode = "server"
+port = 9000
+```
+
+在隔离副本、干净环境中执行 `mise install` → 需要时 `mise run install` / `mise run build` → `mise run dev` / `mise run start`，避免复用本机已安装的包掩盖遗漏。不使用客户线上作为试验场；不能完成目标 Linux/镜像或外部业务依赖验证时明确列出边界，不宣称正式发布已修复。
+
+`MISE_DEPENDENCY_SETUP_UNVERIFIED` 只表示依赖安装尚未由 CLI 静态检查确认，不是硬门禁；内置依赖、标准库、预编译产物等可合理没有 install。反过来，声明了 install/build 也不是安装有效的证明，仍需验证。
+
+失败诊断分三层读取：运行线索（例如 No module named uvicorn）、本次提交的 Mise SHA/任务及清单存在性、疑似迁移遗漏。缺模块也可能是解释器/虚拟环境、安装失败、依赖清单或打包排除问题，不能直接认定 TOML 没写 install。对照原配置与构建日志确认后修复。标注为当前线上入口的观察未确认对应本次版本；诊断超时、入口不可达、未获取完整错误时，保留原错误和 traceId，不把“无补充信息”当成成功，不盲目重复 deploy。
 
 ## 场景规则
 
