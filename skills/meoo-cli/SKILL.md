@@ -286,6 +286,8 @@ After successful deploy, the CLI shows the project settings URL for custom domai
 
 **Server deploy upload**: Source upload honors `.dockerignore`; source archive must be ≤100MiB. Build/start behavior comes from `mise.toml`, not fixed shell-script filenames.
 
+**Mise server 打包必查**：使用 `**`、`*` 等先排除再放行的严格 `.dockerignore` 白名单时，必须在文件末尾保留 `!.meoo-runtime/` 和 `!.meoo-runtime/**`，同时保留根 `mise.toml`。该目录由平台远端生成，本地不存在是正常的，不要手写或复制平台脚本；完整规则和失败处理见 [Server Deploy](references/image-deploy.md#dockerignore-与平台运行文件)。
+
 Mise server 发布前可能提示 `MISE_DEPENDENCY_SETUP_UNVERIFIED`：有依赖清单但无 install/build 任务。它是风险告警，不强制每个项目声明 install，也不阻止发布。失败时终端和 JSON 会给出可获取的启动线索、提交配置快照及修复指引；“可能遗漏安装”不是确定根因。当前线上入口的补充错误未确认对应本次版本，不能当成本次发布日志。诊断获取失败不会改变原部署失败结果。
 
 ### Upgrade

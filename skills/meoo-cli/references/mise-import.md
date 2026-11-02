@@ -137,6 +137,8 @@ port = 9000
 
 ## 执行与门禁
 
+server 发布前还须检查 `.dockerignore`：严格白名单必须在末尾保留 `!.meoo-runtime/` 和 `!.meoo-runtime/**`，即使该目录本地不存在也要保留。平台负责生成运行脚本，不要本地补造；完整说明见 [Server Deploy](image-deploy.md#dockerignore-与平台运行文件)。
+
 1. 读取 README、清单、锁文件、已有脚本、Docker/CI 和端口配置，推导真实 install/dev/build/start 命令。
 2. 创建或最小修复根 `mise.toml`；安装、构建、开发和生产启动各自承担单一职责。运行 `node <本 Skill 目录>/scripts/validate-mise-protocol.cjs ./mise.toml`，修复全部错误。
 3. 先按“本地 mise 准备”检查或安装 mise，再执行 `mise install`，必要时执行 `mise run install`。
